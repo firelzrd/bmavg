@@ -13,7 +13,6 @@
 #define bmavg_unlikely(x) __builtin_expect(!!(x), 0)
 #define bmavg_bit(v, p)  (((__typeof__(v))(v) >> (p)) & 1)
 #define bmavg_mask(p) ((__typeof__(v))1 << (p))
-#define bmavg_shr(v, len) ((0 < len) ? v >> len : v << -len)
 #define bmavg_abs(a, b) ((a < b)? b - a : a - b)
 
 #define DEFINE_BMAVG_DECL(BITLEN, HIST_COUNT) \
