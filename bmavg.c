@@ -15,7 +15,6 @@
 #define bmavg_unlikely(x) __builtin_expect(!!(x), 0)
 #define bmavg_bit(v, p)  (((__typeof__(v))(v) >> (p)) & 1)
 #define bmavg_mask(p) ((__typeof__(v))1 << (p))
-#define bmavg_shr(v, len) ((0 < len) ? v >> len : v << -len)
 #define bmavg_abs(a, b) ((a < b)? b - a : a - b)
 #endif // BMAVG_H
 
@@ -28,11 +27,6 @@ static int fls_u8 (uint8_t  v) {return 32 - __builtin_clz ((uint32_t)v);}
 static int fls_u16(uint16_t v) {return 32 - __builtin_clz ((uint32_t)v);}
 static int fls_u32(uint32_t v) {return 32 - __builtin_clz ((uint32_t)v);}
 static int fls_u64(uint64_t v) {return 64 - __builtin_clzl((uint64_t)v);}
-
-static int ctz_u8 (uint8_t  v) {return __builtin_ctz ((uint32_t)v);}
-static int ctz_u16(uint16_t v) {return __builtin_ctz ((uint32_t)v);}
-static int ctz_u32(uint32_t v) {return __builtin_ctz ((uint32_t)v);}
-static int ctz_u64(uint64_t v) {return __builtin_ctzl((uint64_t)v);}
 
 #define DEFINE_BMAVG(BITLEN, HIST_COUNT) \
 struct bmavg_u##BITLEN { \
