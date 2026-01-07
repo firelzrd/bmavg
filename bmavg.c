@@ -61,28 +61,19 @@ void bmavg_write_u##BITLEN(struct bmavg_u##BITLEN *bmavg, uint##BITLEN##_t v) { 
 		bmavg->count = hmask; \
 	return; \
 } \
-static uint##BITLEN##_t div_norm_shr_u##BITLEN( \
-		uint##BITLEN##_t v, uint##BITLEN##_t denom) { \
-	int shl = clz_u##BITLEN(v); \
-	int fls = fls_u##BITLEN(denom) - 1; \
-	int shr = shl - fls; \
-	uint##BITLEN##_t result_norm = (v << shl) / denom; \
-	uint##BITLEN##_t result = bmavg_shr(result_norm, shr); \
-	return result; \
-} \
 uint##BITLEN##_t bmavg_read_u##BITLEN(struct bmavg_u##BITLEN *bmavg) { \
-	uint##BITLEN##_t sum = 0, pos = 0, next, denom, diff_abs; \
+	int pos, decay = 0; \
+	uint##BITLEN##_t sum = 0, next, diff_abs; \
 	if (bmavg_unlikely(!bmavg->count)) return 0; \
-	sum = bmavg->hist[pos]; \
-	for (; ++pos < bmavg->limit_bitlen;) { \
+	pos = fls_u##BITLEN(bmavg->count) - 1; \
+	if (pos > bmavg->limit_bitlen) \
+		pos = bmavg->limit_bitlen; \
+	for (; pos >= 0; pos--, decay++) { \
 		if (bmavg_bit(bmavg->count, pos)) { \
-			denom = bmavg->count & ~((int##BITLEN##_t)(-2) << pos); \
-			next  = bmavg->hist[pos]; \
-			diff_abs = bmavg_abs(sum, next); \
+			next = bmavg->hist[pos]; \
+			diff_abs = bmavg_abs(sum, next) >> decay; \
 			if (diff_abs) \
-				sum = (sum < next)? \
-					sum + div_norm_shr_u##BITLEN(diff_abs, denom): \
-					sum - div_norm_shr_u##BITLEN(diff_abs, denom); \
+				sum += (sum < next)? diff_abs : -diff_abs; \
 		} \
 	} \
 	return sum; \
