@@ -3,6 +3,7 @@
  *  (C) 2025 Masahito Suzuki
  */
 #include <stdint.h>
+#include "bmavg.h"
 
 #ifndef BMAVG_H
 #define bmavg_swap(a, b) \
@@ -28,49 +29,57 @@ static int fls_u16(uint16_t v) {return 32 - __builtin_clz ((uint32_t)v);}
 static int fls_u32(uint32_t v) {return 32 - __builtin_clz ((uint32_t)v);}
 static int fls_u64(uint64_t v) {return 64 - __builtin_clzl((uint64_t)v);}
 
+#define BMAVG_DBL_8   16
+#define BMAVG_DBL_16  32
+#define BMAVG_DBL_32  64
+#define BMAVG_DBL_64  128
+
+#define bmavg_dbl_uint(N) bmavg_uint(BMAVG_CONCAT(BMAVG_DBL_, N))
+
 #define DEFINE_BMAVG(BITLEN, HIST_COUNT) \
-struct bmavg_u##BITLEN { \
-	uint##BITLEN##_t hist[HIST_COUNT]; \
-	uint##BITLEN##_t count; \
-	int limit_bitlen; \
-}; \
-void bmavg_write_u##BITLEN(struct bmavg_u##BITLEN *bmavg, uint##BITLEN##_t v) { \
-	uint##BITLEN##_t curr = bmavg->count, \
+const int bmavg_hist_count_u##BITLEN = HIST_COUNT; \
+void bmavg_write_u##BITLEN(struct bmavg_u##BITLEN *bmavg, bmavg_uint(BITLEN) v) { \
+	bmavg_uint(BITLEN) curr = bmavg->count, \
 		fmask = bmavg_mask(bmavg->limit_bitlen), \
 		hmask = bmavg_mask(bmavg->limit_bitlen - 1), \
 		full = (curr == fmask - 1); \
 	if (bmavg_unlikely(full)) \
 		curr = hmask - 1; \
-	uint##BITLEN##_t next = curr + 1, \
+	bmavg_uint(BITLEN) next = curr + 1, \
 		should_halve = !(next % hmask), \
-		carried = v, pos = 0, \
+		carried = v, \
 		carry_bmp = (next ^ curr) >> 1; \
-	for (; bmavg_bit(carry_bmp, pos); pos++) \
-		carried = (carried + bmavg_swap(bmavg->hist[pos], 0) + 1) / 2; \
-	if (bmavg_unlikely(full)) \
-		carried = (carried + bmavg->hist[pos] + 1) / 2; \
+    int pos = 0; \
+	for (; bmavg_bit(carry_bmp, pos); pos++) { \
+        bmavg_uint(BITLEN) other = bmavg_swap(bmavg->hist[pos], 0); \
+        bmavg_uint(BITLEN) mid = (carried & other) + ((carried ^ other) >> 1); \
+        bmavg_uint(BITLEN) rem = (carried ^ other) & 1; \
+        carried = mid + (mid & rem); \
+    } \
+	if (bmavg_unlikely(full)) { \
+        bmavg_uint(BITLEN) other = bmavg->hist[pos]; \
+        bmavg_uint(BITLEN) mid = (carried & other) + ((carried ^ other) >> 1); \
+        bmavg_uint(BITLEN) rem = (carried ^ other) & 1; \
+        carried = mid + (mid & rem); \
+    } \
 	bmavg->hist[pos] = carried; \
 	bmavg->count++; \
 	if (bmavg_unlikely(should_halve)) \
 		bmavg->count = hmask; \
 	return; \
 } \
-uint##BITLEN##_t bmavg_read_u##BITLEN(struct bmavg_u##BITLEN *bmavg) { \
-	int pos, decay = 0; \
-	uint##BITLEN##_t sum = 0, next, diff_abs; \
+bmavg_uint(BITLEN) bmavg_read_u##BITLEN(struct bmavg_u##BITLEN *bmavg) { \
 	if (bmavg_unlikely(!bmavg->count)) return 0; \
-	pos = fls_u##BITLEN(bmavg->count) - 1; \
+    bmavg_dbl_uint(BITLEN) total = 0; \
+	int pos = fls_u##BITLEN(bmavg->count) - 1; \
 	if (pos > bmavg->limit_bitlen) \
 		pos = bmavg->limit_bitlen; \
-	for (; pos >= 0; pos--, decay++) { \
+	for (; pos >= 0; pos--) { \
 		if (bmavg_bit(bmavg->count, pos)) { \
-			next = bmavg->hist[pos]; \
-			diff_abs = bmavg_abs(sum, next) >> decay; \
-			if (diff_abs) \
-				sum += (sum < next)? diff_abs : -diff_abs; \
+            total += (bmavg_dbl_uint(BITLEN))bmavg->hist[pos] << pos; \
 		} \
 	} \
-	return sum; \
+	return (bmavg_uint(BITLEN))(total / bmavg->count); \
 } \
 void bmavg_init_u##BITLEN(struct bmavg_u##BITLEN *bmavg) { \
 	for (int pos = 0; pos < HIST_COUNT; pos++) \
